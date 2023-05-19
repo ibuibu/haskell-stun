@@ -25,6 +25,8 @@ dependencies:
 - binary
 - bytestring
 - bits
+- network-info
+- pureMD5
 
 ghc-options:
 - -Wall
