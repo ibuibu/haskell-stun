@@ -37,6 +37,7 @@ library
     , bits
     , bytestring
     , network
+    , random
   default-language: Haskell2010
 
 executable haskell-stun-exe
@@ -53,6 +54,7 @@ executable haskell-stun-exe
     , bytestring
     , haskell-stun
     , network
+    , random
   default-language: Haskell2010
 
 test-suite haskell-stun-test
@@ -70,4 +72,5 @@ test-suite haskell-stun-test
     , bytestring
     , haskell-stun
     , network
+    , random
   default-language: Haskell2010
