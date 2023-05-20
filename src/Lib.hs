@@ -1,4 +1,4 @@
-module Lib (runUdpServer) where
+module Lib (runServer, sendBindingRequest) where
 
 import Control.Monad
 import Data.Binary.Get
@@ -11,10 +11,11 @@ import Data.Word
 import Network.Socket
 import Network.Socket.ByteString (recvFrom, sendTo)
 import Numeric
+import System.Random
 
-runUdpServer :: IO ()
-runUdpServer = do
-  addrinfos <- getAddrInfo Nothing (Just "127.0.0.1") (Just "7000")
+runServer :: HostName -> ServiceName -> IO ()
+runServer addr port = do
+  addrinfos <- getAddrInfo Nothing (Just addr) (Just port)
   let serveraddr = head addrinfos
   sock <- socket (addrFamily serveraddr) Datagram defaultProtocol
   bind sock (addrAddress serveraddr)
@@ -45,9 +46,21 @@ getRequest = do
 
 sendResponse :: Socket -> SockAddr -> TransactionId -> IO ()
 sendResponse sock addr transactionId = do
-  let message = runPut $ putStunMessage SuccessResponse Binding transactionId addr
-  result <- sendTo sock (B.concat $ L.toChunks message) addr
-  print result
+  let message = runPut $ putStunMessage SuccessResponse Binding transactionId (XorMappedAddress addr)
+  _ <- sendTo sock (B.concat $ L.toChunks message) addr
+  return ()
+
+sendBindingRequest :: HostName -> ServiceName -> IO ()
+sendBindingRequest targetAddr port = do
+  addrinfos <- getAddrInfo Nothing (Just targetAddr) (Just port)
+  let serveraddr = head addrinfos
+  let targetSockAddr = addrAddress serveraddr
+  sock <- socket (addrFamily serveraddr) Datagram defaultProtocol
+  transactionId <- generateTransactionId
+  let request = runPut $ putStunMessage Request Binding transactionId Software
+  _ <- sendTo sock (B.concat $ L.toChunks request) targetSockAddr
+  return ()
+
 
 data StunMessage = StunMessage StunHeader StunAttribute deriving (Show)
 
@@ -74,9 +87,9 @@ putTransactionId :: TransactionId -> Put
 putTransactionId (id1, id2, id3) = mapM_ putWord32be [id1, id2, id3]
 
 -- TODO
-putStunMessage class' method transactionId sockAddr = do
+putStunMessage class' method transactionId attr = do
   putStunHeader (StunHeader (StunType class' method) 12 transactionId)
-  putStunAttribute sockAddr
+  putStunAttribute attr
 
 data StunType = StunType StunClass StunMethod deriving (Show)
 
@@ -101,21 +114,24 @@ data StunMethod = Binding | Allocate | Refresh | Send | Data | CreatePermission 
 stunMethodDic :: [(StunMethod, Integer)]
 stunMethodDic = [(Binding, 1)]
 
-data StunAttribute = StunAttribute StunAttributeType StunAttributeLength StunAttributeValue deriving (Show)
-
 -- TODO
-data StunAttributeType = MappedAddress | XorMappedAddress deriving (Show)
+data StunAttribute = MappedAddress | XorMappedAddress SockAddr | Software deriving (Show)
 
 type StunAttributeLength = Word16
 
 type StunAttributeValue = Int
 
 -- TODO
-putStunAttribute :: SockAddr -> Put
-putStunAttribute sockAddr = do
+putStunAttribute (XorMappedAddress sockAddr) = do
   putWord16be 0x0020 -- xor mapped address
   putWord16be 8
   putXorMappedAddress sockAddr
+
+-- TODO
+putStunAttribute (Software) = do
+  putWord16be 0x8022
+  putWord16be 8
+  putWord16be 8
 
 putXorMappedAddress :: SockAddr -> Put
 putXorMappedAddress sa = do
@@ -157,6 +173,16 @@ findKey key = snd . head . filter (\(k, _) -> k == key)
 -- TODO Either
 findVal :: Eq a => a -> [(c, a)] -> c
 findVal val = fst . head . filter (\(_, v) -> v == val)
+
+generateTransactionId :: IO (Word32, Word32, Word32)
+generateTransactionId = do
+  let max' = 2 ^ 96
+  let maxMinus1 = 2 ^ 96 - 1
+  let randWord32 ma = randomRIO (0, ma) :: IO Word32
+  r1 <- randWord32 max'
+  r2 <- randWord32 max'
+  r3 <- randWord32 maxMinus1
+  return (r1,r2,r3)
 
 slice :: Int -> Int -> [a] -> [a]
 slice from to xs = take (to - from + 1) (drop from xs)

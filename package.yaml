@@ -27,6 +27,7 @@ dependencies:
 - bits
 - network-info
 - pureMD5
+- random
 
 ghc-options:
 - -Wall
