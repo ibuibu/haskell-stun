@@ -25,6 +25,7 @@ dependencies:
 - binary
 - bytestring
 - bits
+- random
 
 ghc-options:
 - -Wall
